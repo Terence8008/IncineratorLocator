@@ -1,0 +1,11 @@
+flask 
+scikit-learn 
+deap 
+geopandas 
+networkx 
+pandas 
+numpy 
+shapely
+rasterio
+matplotlib
+FastAPI

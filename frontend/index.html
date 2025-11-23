@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>GeoTIFF Layers with Toggle and Legends</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- GeoRaster dependencies -->
+  <script src="https://unpkg.com/georaster/dist/georaster.browserify.min.js"></script>
+  <script src="https://unpkg.com/georaster-layer-for-leaflet/dist/georaster-layer-for-leaflet.min.js"></script>
+
+  <style>
+    body, html { margin: 0; padding: 0; height: 100%; }
+    #map { height: 90vh; width: 100%; }
+    #controls { padding: 10px; background: #f0f0f0; }
+
+    .legend {
+      line-height: 18px;
+      color: #555;
+      background: white;
+      padding: 10px;
+      border-radius: 6px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.3);
+      font-size: 13px;
+    }
+
+    .legend i {
+      width: 20px;
+      height: 20px;
+      float: left;
+      margin-right: 8px;
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <label>Upload Population .tif: </label>
+    <input type="file" id="popInput" accept=".tif,.tiff" />
+    <br><br>
+    <label>Upload Land Use .tif: </label>
+    <input type="file" id="landInput" accept=".tif,.tiff" />
+  </div>
+  <div id="map"></div>
+
+  <script>
+    const map = L.map("map").setView([3.07, 101.6], 9);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "© OpenStreetMap contributors"
+    }).addTo(map);
+
+    const overlays = {}; // to hold layer references
+    const legend = L.control({ position: "bottomright" });
+
+    function getPopulationColor(val) {
+      return val > 200 ? '#800026' :
+             val > 150 ? '#BD0026' :
+             val > 100 ? '#E31A1C' :
+             val > 50  ? '#FC4E2A' :
+             val > 20  ? '#FD8D3C' :
+             val > 10  ? '#FEB24C' :
+             val > 5   ? '#FED976' : '#FFEDA0';
+    }
+
+    function getLandUseColor(val) {
+      switch (val) {
+        case 1: return '#a1d99b'; // Non-paddy agriculture (light green)
+        case 2: return '#31a354'; // Paddy fields (dark green)
+        case 3: return '#add8e6'; // Rural residential (light blue)
+        case 4: return '#08519c'; // Urban residential (navy)
+        case 5: return '#ff7f00'; // Commercial/institutional (orange)
+        case 6: return '#b15928'; // Industrial/infrastructure (brown)
+        case 7: return '#969696'; // Roads (grey)
+        case 8: return '#e31a1c'; // Urban (red)
+        case 9: return '#f7f7f7'; // Others (white/neutral)
+        default: return '#cccccc'; // Unknown
+      }
+    }
+
+    async function addTifLayer(file, name, colorFn) {
+      const arrayBuffer = await file.arrayBuffer();
+      const georaster = await parseGeoraster(arrayBuffer);
+
+      const layer = new GeoRasterLayer({
+        georaster,
+        opacity: 0.7,
+        pixelValuesToColorFn: values => colorFn(values[0])
+      });
+
+      overlays[name] = layer;
+      map.fitBounds(layer.getBounds());
+      updateLayerControl();
+      updateLegend(name);
+      layer.addTo(map);
+
+      alert(`${name} layer loaded successfully!`);
+    }
+
+    function updateLayerControl() {
+      if (map.layerControl) map.removeControl(map.layerControl);
+      map.layerControl = L.control.layers(null, overlays, { collapsed: false }).addTo(map);
+
+      map.on("overlayadd", e => {
+        // Find which layer name matches this layer object
+        for (const [name, layer] of Object.entries(overlays)) {
+          if (e.layer === layer) {
+            updateLegend(name);
+            break;
+          }
+        }
+      });
+
+      map.on("overlayremove", e => {
+        removeLegend();
+      });
+    }
+
+    function updateLegend(layerName) {
+      legend.onAdd = function() {
+        const div = L.DomUtil.create("div", "legend");
+        let grades = [];
+
+        if (layerName === "Population") {
+          div.innerHTML += "<strong>Population Density</strong><br>";
+          grades = [0, 5, 10, 20, 50, 100, 150, 200];
+          for (let i = 0; i < grades.length; i++) {
+            div.innerHTML +=
+              '<i style="background:' + getPopulationColor(grades[i] + 1) + '"></i> ' +
+              grades[i] + (grades[i + 1] ? '&ndash;' + grades[i + 1] + '<br>' : '+');
+          }
+        } else if (layerName === "Land Use") {
+          div.innerHTML += "<strong>Land Use Categories</strong><br>";
+          const categories = [
+            { code: 1, name: "Non-paddy agriculture" },
+            { code: 2, name: "Paddy fields" },
+            { code: 3, name: "Rural residential" },
+            { code: 4, name: "Urban residential" },
+            { code: 5, name: "Commercial/Institutional" },
+            { code: 6, name: "Industrial/Infrastructure" },
+            { code: 7, name: "Roads" },
+            { code: 8, name: "Urban" },
+            { code: 9, name: "Others" }
+          ];
+          categories.forEach(c => {
+            div.innerHTML += `<i style="background:${getLandUseColor(c.code)}"></i>${c.name}<br>`;
+          });
+        }
+        return div;
+      };
+      legend.addTo(map);
+    }
+
+    function removeLegend() {
+      if (legend) map.removeControl(legend);
+    }
+
+    // Upload Handlers
+    document.getElementById("popInput").addEventListener("change", e => {
+      const file = e.target.files[0];
+      if (file) addTifLayer(file, "Population", getPopulationColor);
+    });
+
+    document.getElementById("landInput").addEventListener("change", e => {
+      const file = e.target.files[0];
+      if (file) addTifLayer(file, "Land Use", getLandUseColor);
+    });
+  </script>
+</body>
+</html>
