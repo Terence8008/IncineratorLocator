@@ -4,17 +4,17 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import joblib
 
-df = pd.read_csv("data/selangor_sample_points_full.csv")
+df = pd.read_csv("data/processed/selangor_training.csv")
 
 # ===============================
 # Select Features for Training
 # ===============================
 # Use MCDA-weighted normalized features + land use score
 feature_cols = [
-    "population_norm",
-    "dist_river_norm",
-    "dist_road_norm",
-    "landuse_score"
+    "population",
+    "land_use",
+    "dist_river_m",
+    "dist_road_m"
 ]
 
 X = df[feature_cols]
@@ -55,5 +55,5 @@ print(confusion_matrix(y_test, y_pred))
 # ===============================
 # Save Trained Model
 # ===============================
-joblib.dump(rf, "models/incinerator_rf_model.pkl")
+joblib.dump(rf, "backend/models/incinerator_rf_model.pkl")
 print("\n Model saved to model/incinerator_rf_model.pkl")

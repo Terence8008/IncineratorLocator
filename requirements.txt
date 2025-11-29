@@ -9,3 +9,4 @@ shapely
 rasterio
 matplotlib
 FastAPI
+uvicorn

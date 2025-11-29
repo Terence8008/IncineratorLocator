@@ -1,0 +1,4 @@
+*.tif
+data/processed/rivers_selangor.geojson
+data/processed/roads_selangor.geojson
+data/processed/selangor_boundary.geojson

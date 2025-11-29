@@ -29,9 +29,9 @@ def generate_random_points(polygon, n_points):
     return gpd.GeoDataFrame(geometry=points, crs=boundary.crs)
 
 # === Generate 5000 random points ===
-print("🎯 Generating 5000 random points within Selangor...")
+print("Generating 5000 random points within Selangor...")
 points_gdf = generate_random_points(polygon, 5000)
-print("✅ Points generated.")
+print("Points generated.")
 
 # === Function to extract raster values ===
 def extract_raster_values(raster_path, points_gdf, column_name):
@@ -44,16 +44,16 @@ def extract_raster_values(raster_path, points_gdf, column_name):
     return points_gdf
 
 # === Extract raster values ===
-print("📊 Extracting population values...")
+print(" Extracting population values...")
 points_gdf = extract_raster_values("data/population_selangor.tif", points_gdf, "population")
 
-print("🌱 Extracting land use values...")
+print(" Extracting land use values...")
 points_gdf = extract_raster_values("data/landuse_selangor.tif", points_gdf, "land_use")
 
 # === Reproject points to metric CRS for distance calculation ===
 points_gdf = points_gdf.to_crs(epsg=3857)
 
-print("💧 Cleaning river geometries...")
+print(" Cleaning river geometries...")
 rivers = gpd.read_file("data/rivers_selangor.geojson").to_crs(epsg=3857)
 rivers = rivers[rivers.geometry.notnull()]
 rivers = rivers[rivers.is_valid]
@@ -61,7 +61,7 @@ rivers = rivers[~rivers.is_empty]
 rivers = rivers[rivers.geom_type.isin(["LineString", "MultiLineString"])]
 rivers_union = rivers.geometry.unary_union
 
-print("🛣️ Cleaning road geometries...")
+print(" Cleaning road geometries...")
 roads = gpd.read_file("data/roads_selangor.geojson").to_crs(epsg=3857)
 roads = roads[roads.geometry.notnull()]
 roads = roads[roads.is_valid]
@@ -69,27 +69,27 @@ roads = roads[~roads.is_empty]
 roads = roads[roads.geom_type.isin(["LineString", "MultiLineString"])]
 roads_union = roads.geometry.unary_union
 
-print("💧 Computing distance to nearest river...")
+print("Computing distance to nearest river...")
 points_gdf["dist_river_m"] = points_gdf.geometry.apply(
     lambda p: p.distance(nearest_points(p, rivers_union)[1])
 )
 
-print("🛣️ Computing distance to nearest main road...")
+print(" Computing distance to nearest main road...")
 points_gdf["dist_road_m"] = points_gdf.geometry.apply(
     lambda p: p.distance(nearest_points(p, roads_union)[1])
 )
 
 # === Compute distance to rivers and roads ===
-print("💧 Computing distance to nearest river...")
+print(" Computing distance to nearest river...")
 points_gdf["dist_river_m"] = points_gdf.geometry.apply(lambda p: p.distance(nearest_points(p, rivers_union)[1]))
 
-print("🛣️ Computing distance to nearest main road...")
+print(" Computing distance to nearest main road...")
 points_gdf["dist_road_m"] = points_gdf.geometry.apply(lambda p: p.distance(nearest_points(p, roads_union)[1]))
 
 # === Save final CSV ===
 points_gdf["lon"] = points_gdf.to_crs(epsg=4326).geometry.x
 points_gdf["lat"] = points_gdf.to_crs(epsg=4326).geometry.y
-df = points_gdf.drop(columns="geometry")
+df = points_gdf.drop(columns="geometry")x
 
 df.to_csv("data/selangor_sample_points_features.csv", index=False)
-print("✅ Saved: selangor_sample_points_features.csv")
+print(" Saved: selangor_sample_points_features.csv")
