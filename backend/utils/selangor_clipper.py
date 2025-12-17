@@ -4,37 +4,35 @@ from rasterio.mask import mask
 from pathlib import Path
 import json
 
-# Code for processing raw population and landuse datat to malaysia
-
+# Setup Directory Paths
 DATA_DIR = Path("data")
-
-# go up one folder, then into "data"
+# Use the "full" boundary file you just created
 json_path = DATA_DIR / "processed" / "selangor_boundary.geojson"
 population_path = DATA_DIR / "raw" / "population.tif"
 landuse_path = DATA_DIR / "raw" / "landuse.tif"
 
-# === Load Selangor boundary ===
+# Create output directory
+output_dir = DATA_DIR / "processed"
+output_dir.mkdir(parents=True, exist_ok=True)
+
+# === Load the pre-processed "Solid" Boundary ===
 boundary = gpd.read_file(json_path)
 
-# Filter for Selangor AND the Federal Territories (KL and Putrajaya)
-# Note: Check your GeoJSON 'NAME_1' values; they are usually 'Selangor', 
-# 'Kuala Lumpur', and 'Putrajaya'
-target_areas = ["Selangor", "Kuala Lumpur", "Putrajaya"]
-boundary = boundary[boundary['NAME_1'].isin(target_areas)]
-
-# GADM sometimes includes multiple polygons; dissolve into one
-boundary = boundary.dissolve(by="NAME_1")
-
-# Convert boundary geometry to GeoJSON format for rasterio
-geojson_geom = [json.loads(boundary.to_json())["features"][0]["geometry"]]
-
 # === Function to clip raster ===
-def clip_raster(input_tif, output_tif, geometry):
+def clip_raster(input_tif, output_tif, boundary_gdf):
     with rasterio.open(input_tif) as src:
-        out_image, out_transform = mask(src, geometry, crop=True)
+        # IMPORTANT: Ensure boundary CRS matches the TIF CRS (e.g., EPSG:4326)
+        if boundary_gdf.crs != src.crs:
+            boundary_gdf = boundary_gdf.to_crs(src.crs)
+        
+        # Convert geometry to GeoJSON format for masking
+        geoms = [json.loads(boundary_gdf.to_json())["features"][0]["geometry"]]
+        
+        # Clip the raster
+        # all_touched=True ensures small pixels at the edge of KL/Selangor aren't dropped
+        out_image, out_transform = mask(src, geoms, crop=True, all_touched=True)
+        
         out_meta = src.meta.copy()
-
-        # Update metadata
         out_meta.update({
             "driver": "GTiff",
             "height": out_image.shape[1],
@@ -45,8 +43,11 @@ def clip_raster(input_tif, output_tif, geometry):
         with rasterio.open(output_tif, "w", **out_meta) as dest:
             dest.write(out_image)
 
-    print(f" Clipped raster saved: {output_tif}")
+    print(f"✅ Clipped raster saved: {output_tif}")
 
-# === Clip both layers ===
-clip_raster(population_path, "population_selangor.tif", geojson_geom)
-clip_raster(landuse_path, "landuse_selangor.tif", geojson_geom)
+# === Run the clipping ===
+pop_output = output_dir / "population_selangor.tif"
+land_output = output_dir / "landuse_selangor.tif"
+
+clip_raster(population_path, pop_output, boundary)
+clip_raster(landuse_path, land_output, boundary)

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from models.model import IncineratorPredictor
 from utils.feature_extraction import extract_features_from_latlon
 from utils.analysis import get_site_insights

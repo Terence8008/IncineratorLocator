@@ -1,17 +1,28 @@
 from pathlib import Path
 import geopandas as gpd
 
-# get current script directory
-current_dir = Path(__file__).resolve().parent
+# 1. Setup paths
+DATA_DIR = Path("data")
+json_path = DATA_DIR  / "raw" / "gadm41_MYS_1.json"
 
-# go up one folder, then into "data"
-json_path = current_dir.parent / "data" / "gadm41_MYS_1.json"
-
-# Load Selangor boundary (Level 1)
+# 2. Load the full Malaysia boundary file
 gdf = gpd.read_file(json_path)
 
-# Filter only Selangor
-selangor = gdf[gdf["NAME_1"] == "Selangor"]
+# 3. Define the areas we need to create a solid Greater Selangor region
+# Based on your previous print output: 'KualaLumpur' (no space) and 'Putrajaya'
+target_areas = ["Selangor", "KualaLumpur", "Putrajaya"]
 
-# Save filtered boundary
-selangor.to_file("selangor_boundary.geojson", driver="GeoJSON")
+# 4. Filter the GeoDataFrame for these three regions
+greater_selangor = gdf[gdf["NAME_1"].isin(target_areas)]
+
+# 5. Dissolve them into a single solid polygon 
+# This is the crucial step to remove the internal "donut hole" borders
+greater_selangor_dissolved = greater_selangor.dissolve()
+
+# 6. Save the new solid boundary
+# We use the dissolved version so the clipping tool treats it as one shape
+output_path = DATA_DIR / "processed"/"selangor_boundary.geojson"
+greater_selangor_dissolved.to_file(output_path, driver="GeoJSON")
+
+print(f"Successfully saved solid boundary to {output_path}")
+print(f"Regions included: {greater_selangor['NAME_1'].unique()}")
