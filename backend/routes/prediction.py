@@ -1,19 +1,20 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from models.model import IncineratorPredictor
 from utils.feature_extraction import extract_features_from_latlon
+from utils.analysis import get_site_insights
 import numpy as np
 
 router = APIRouter()
 model = IncineratorPredictor()
 
 @router.get("/predict")
-def predict(lat: float, lon: float):
-    features_dict = extract_features_from_latlon(lat, lon)
+def predict(latitude: float, longitude: float):
+    features_dict = extract_features_from_latlon(latitude, longitude)
 
     # Convert all values in features_dict to native Python types
     features_dict = {k: float(v) if isinstance(v, (np.floating, np.integer)) else v
                      for k, v in features_dict.items()}
-
+    
     # Prepare features list for model
     features_list = [
         features_dict["population"],
@@ -25,9 +26,13 @@ def predict(lat: float, lon: float):
     # Prediction as native int
     prediction = int(model.predict(features_list))
 
+    #Get Human-Readable Analysis
+    insights = get_site_insights(features_dict)
+
     return {
-        "lat": float(lat),
-        "lon": float(lon),
+        "lat": float(latitude),
+        "lon": float(longitude),
         "features": features_dict,
-        "prediction": "Suitable" if prediction == 1 else "Not Suitable"
+        "prediction": "Suitable" if prediction == 1 else "Not Suitable",
+        "insights": insights
     }

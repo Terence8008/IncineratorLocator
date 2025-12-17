@@ -2,19 +2,25 @@ import geopandas as gpd
 import rasterio
 from rasterio.mask import mask
 from pathlib import Path
-import os
 import json
 
-# get current script directory
-current_dir = Path(__file__).resolve().parent
+# Code for processing raw population and landuse datat to malaysia
+
+DATA_DIR = Path("data")
 
 # go up one folder, then into "data"
-json_path = current_dir.parent / "data" / "selangor_boundary.geojson"
-population_path = current_dir.parent / "data" / "population.tif"
-landuse_path = current_dir.parent / "data" / "landuse.tif"
+json_path = DATA_DIR / "processed" / "selangor_boundary.geojson"
+population_path = DATA_DIR / "raw" / "population.tif"
+landuse_path = DATA_DIR / "raw" / "landuse.tif"
 
 # === Load Selangor boundary ===
 boundary = gpd.read_file(json_path)
+
+# Filter for Selangor AND the Federal Territories (KL and Putrajaya)
+# Note: Check your GeoJSON 'NAME_1' values; they are usually 'Selangor', 
+# 'Kuala Lumpur', and 'Putrajaya'
+target_areas = ["Selangor", "Kuala Lumpur", "Putrajaya"]
+boundary = boundary[boundary['NAME_1'].isin(target_areas)]
 
 # GADM sometimes includes multiple polygons; dissolve into one
 boundary = boundary.dissolve(by="NAME_1")

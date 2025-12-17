@@ -3,93 +3,121 @@ import pandas as pd
 import numpy as np
 import rasterio
 from shapely.geometry import Point
-from shapely.ops import nearest_points
-from rasterio import sample
 import random
+from pathlib import Path
+from rasterio.warp import transform
+from sklearn.preprocessing import MinMaxScaler
 
-# === Load Selangor boundary ===
-boundary = gpd.read_file("data/selangor_boundary.geojson")
-boundary = boundary.dissolve(by="NAME_1")  # Merge into single polygon
+# === Configuration & Paths ===
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+DATA_DIR = PROJECT_ROOT / "data" / "processed"
+
+WGS84 = "EPSG:4326"
+METRIC_CRS = "EPSG:32648"  # UTM 48N for Selangor meters
+
+# MCDA Weights
+W_POP = 0.35
+W_RIVER = 0.30
+W_ROAD = 0.20
+W_LAND = 0.15
+
+LANDUSE_SCORES = {
+    1: 0.8, 2: 0.6, 3: 0.2, 4: 0.1, 5: 0.2,
+    6: 1.0, 7: 0.1, 8: 0.1, 9: 0.5
+}
+
+# === 1. Load Geospatial Data ===
+print("Loading boundaries and vector data...")
+boundary = gpd.read_file(DATA_DIR / "selangor_boundary.geojson").to_crs(WGS84)
+boundary = boundary.dissolve() 
 polygon = boundary.geometry.values[0]
 
-# === Load rivers and roads, reproject to metric CRS for distance calculation ===
-rivers = gpd.read_file("data/rivers_selangor.geojson").to_crs(epsg=3857)
-roads = gpd.read_file("data/roads_selangor.geojson").to_crs(epsg=3857)
-rivers_union = rivers.geometry.union_all
-roads_union = roads.geometry.union_all
+rivers = gpd.read_file(DATA_DIR / "rivers_selangor.geojson").to_crs(METRIC_CRS)
+roads = gpd.read_file(DATA_DIR / "roads_selangor.geojson").to_crs(METRIC_CRS)
+rivers_union = rivers.unary_union
+roads_union = roads.unary_union
 
-# === Function to generate random points inside boundary ===
-def generate_random_points(polygon, n_points):
-    minx, miny, maxx, maxy = polygon.bounds
+pop_raster = rasterio.open(DATA_DIR / "population_selangor.tif")
+lu_raster = rasterio.open(DATA_DIR / "landuse_selangor.tif")
+
+# === 2. Generate Random Points & Extract Features ===
+def generate_random_points(poly, n_points):
+    minx, miny, maxx, maxy = poly.bounds
     points = []
     while len(points) < n_points:
-        random_point = Point(random.uniform(minx, maxx), random.uniform(miny, maxy))
-        if polygon.contains(random_point):
-            points.append(random_point)
-    return gpd.GeoDataFrame(geometry=points, crs=boundary.crs)
+        p = Point(random.uniform(minx, maxx), random.uniform(miny, maxy))
+        if poly.contains(p):
+            points.append(p)
+    return gpd.GeoDataFrame(geometry=points, crs=WGS84)
 
-# === Generate 5000 random points ===
-print("Generating 5000 random points within Selangor...")
-points_gdf = generate_random_points(polygon, 5000)
-print("Points generated.")
+def get_raster_val(raster, lon, lat):
+    tx, ty = transform(WGS84, raster.crs, [lon], [lat])
+    for val in raster.sample([(tx[0], ty[0])]):
+        return val[0]
 
-# === Function to extract raster values ===
-def extract_raster_values(raster_path, points_gdf, column_name):
-    with rasterio.open(raster_path) as src:
-        values = []
-        for point in points_gdf.geometry:
-            for val in sample.sample_gen(src, [(point.x, point.y)]):
-                values.append(val[0] if val is not None else np.nan)
-        points_gdf[column_name] = values
-    return points_gdf
+N_SAMPLES = 5000
+print(f"Generating {N_SAMPLES} samples...")
+points_gdf = generate_random_points(polygon, N_SAMPLES)
 
-# === Extract raster values ===
-print(" Extracting population values...")
-points_gdf = extract_raster_values("data/population_selangor.tif", points_gdf, "population")
+raw_data = []
+for geom in points_gdf.geometry:
+    lon, lat = geom.x, geom.y
+    pop = get_raster_val(pop_raster, lon, lat)
+    lu = get_raster_val(lu_raster, lon, lat)
+    
+    # Filter NoData and outliers
+    if pop == pop_raster.nodata or lu == lu_raster.nodata or pop < 0:
+        continue
 
-print(" Extracting land use values...")
-points_gdf = extract_raster_values("data/landuse_selangor.tif", points_gdf, "land_use")
+    # Metric distance
+    mx, my = transform(WGS84, METRIC_CRS, [lon], [lat])
+    p_metric = Point(mx[0], my[0])
+    
+    raw_data.append({
+        "latitude": lat,
+        "longitude": lon,
+        "population": pop,
+        "land_use": lu,
+        "dist_river_m": p_metric.distance(rivers_union),
+        "dist_road_m": p_metric.distance(roads_union)
+    })
 
-# === Reproject points to metric CRS for distance calculation ===
-points_gdf = points_gdf.to_crs(epsg=3857)
+df = pd.DataFrame(raw_data)
 
-print(" Cleaning river geometries...")
-rivers = gpd.read_file("data/rivers_selangor.geojson").to_crs(epsg=3857)
-rivers = rivers[rivers.geometry.notnull()]
-rivers = rivers[rivers.is_valid]
-rivers = rivers[~rivers.is_empty]
-rivers = rivers[rivers.geom_type.isin(["LineString", "MultiLineString"])]
-rivers_union = rivers.geometry.unary_union
+# === 3. Apply MCDA Logic for Labeling ===
+print("Applying MCDA scoring...")
+df["landuse_score"] = df["land_use"].map(LANDUSE_SCORES).fillna(0)
 
-print(" Cleaning road geometries...")
-roads = gpd.read_file("data/roads_selangor.geojson").to_crs(epsg=3857)
-roads = roads[roads.geometry.notnull()]
-roads = roads[roads.is_valid]
-roads = roads[~roads.is_empty]
-roads = roads[roads.geom_type.isin(["LineString", "MultiLineString"])]
-roads_union = roads.geometry.unary_union
-
-print("Computing distance to nearest river...")
-points_gdf["dist_river_m"] = points_gdf.geometry.apply(
-    lambda p: p.distance(nearest_points(p, rivers_union)[1])
+scaler = MinMaxScaler()
+df[["pop_n", "riv_n", "rod_n"]] = scaler.fit_transform(
+    df[["population", "dist_river_m", "dist_road_m"]]
 )
 
-print(" Computing distance to nearest main road...")
-points_gdf["dist_road_m"] = points_gdf.geometry.apply(
-    lambda p: p.distance(nearest_points(p, roads_union)[1])
+# MCDA Calculation (1 - pop_n because lower population is better)
+df["mcda_score"] = (
+    (1 - df["pop_n"]) * W_POP +
+    df["riv_n"] * W_RIVER +
+    df["rod_n"] * W_ROAD +
+    df["landuse_score"] * W_LAND
 )
 
-# === Compute distance to rivers and roads ===
-print(" Computing distance to nearest river...")
-points_gdf["dist_river_m"] = points_gdf.geometry.apply(lambda p: p.distance(nearest_points(p, rivers_union)[1]))
+# Create Binary Label based on Median
+threshold = df["mcda_score"].median()
+df["suitable"] = (df["mcda_score"] >= threshold).astype(int)
 
-print(" Computing distance to nearest main road...")
-points_gdf["dist_road_m"] = points_gdf.geometry.apply(lambda p: p.distance(nearest_points(p, roads_union)[1]))
+# === 4. Final Formatting & Export ===
+# Arrange columns to match the "Selangor Full" layout for consistency
+column_order = [
+    "latitude", "longitude", "population", "land_use", 
+    "dist_river_m", "dist_road_m", "suitable"
+]
 
-# === Save final CSV ===
-points_gdf["lon"] = points_gdf.to_crs(epsg=4326).geometry.x
-points_gdf["lat"] = points_gdf.to_crs(epsg=4326).geometry.y
-df = points_gdf.drop(columns="geometry")x
+df_train = df[column_order]
 
-df.to_csv("data/selangor_sample_points_features.csv", index=False)
-print(" Saved: selangor_sample_points_features.csv")
+print(f"Final dataset contains {len(df_train)} valid records.")
+df_train.to_csv(DATA_DIR / "selangor_training.csv", index=False)
+print("Saved: data/processed/selangor_training.csv")
+
+# Cleanup
+pop_raster.close()
+lu_raster.close()

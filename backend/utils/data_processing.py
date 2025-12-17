@@ -1,6 +1,8 @@
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
+# Prepare sample point for training
+
 df = pd.read_csv("data/processed/selangor_sample_points_features.csv")
 
 # Weight constants
@@ -58,9 +60,7 @@ df_full = df[[
 df_full.to_csv("data/processed/selangor_full.csv", index=False)
 
 
-# -------------------------
 # OUTPUT B: ML Training CSV (no mcda_score)
-# -------------------------
 df_train = df[[
     "population",
     "land_use",
