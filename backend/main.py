@@ -10,7 +10,7 @@ app = FastAPI(title="Incinerator Site Selection API")
 
 # Mount the processed data folder so frontend can access the .png plots
 # Access via: http://localhost:8000/static/confusion_matrix.png
-DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "processed"
+DATA_PATH = Path(__file__).resolve().parent.parent / "backend"/ "static"/ "metrics"
 app.mount("/static", StaticFiles(directory=DATA_PATH), name="static")
 
 # Register API routes
