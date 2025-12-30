@@ -10,3 +10,5 @@ rasterio
 matplotlib
 FastAPI
 uvicorn
+seaborn
+shap
