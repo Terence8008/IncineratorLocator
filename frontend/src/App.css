@@ -36,3 +36,230 @@
     transform: rotate(360deg);
   }
 }
+
+/* Layout & Navigation */
+.app-container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.nav-bar {
+  background: #1a2a3a;
+  color: white;
+  padding: 10px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.nav-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.tab-btn {
+  background: none;
+  border: 1px solid #555;
+  color: #ccc;
+  padding: 6px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.tab-btn.active {
+  background: #3498db;
+  border: 1px solid #3498db;
+  color: white;
+}
+
+/* Sidebar Area */
+.main-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.sidebar {
+    
+  width: 280px;
+  background: #fff;
+  border-right: 1px solid #ddd;
+  padding: 20px;
+  z-index: 1001;
+  overflow-y: auto;
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+}
+
+.open-sidebar-btn {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+  background: #fff;
+  border: 1px solid #ccc;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Map & Overlays */
+.map-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.layer-controls {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  background: white;
+  padding: 12px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  border: 1px solid #ddd;
+}
+
+.layer-btn {
+  padding: 5px 10px;
+  border: 1px solid #ddd;
+  background: #fff;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.layer-btn.active {
+  background: #007bff;
+  color: #fff;
+  border-color: #0056b3;
+}
+
+/* Results Panel */
+.results-panel {
+  padding: 20px;
+  background: #fff;
+  border-top: 2px solid #eee;
+  overflow-y: auto;
+  min-height: 35%;
+  max-height: 45%;
+}
+
+.analyze-btn {
+  padding: 12px 40px;
+  background: #007bff;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 1rem;
+  transition: transform 0.1s;
+}
+
+.analyze-btn:active {
+  transform: scale(0.98);
+}
+
+.analyze-btn:disabled {
+  background: #ccc;
+}
+
+/* Outcome Layout */
+.outcome-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1.5fr; /* Giving SHAP and Insights more room */
+  gap: 20px;
+  width: 100%;
+}
+
+.assessment-col {
+  padding: 0 10px;
+}
+
+.policy-gauge {
+  margin-top: 15px;
+  padding: 15px;
+  background: #ebf5fb;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.gauge-bar-base {
+  width: 100%;
+  height: 10px;
+  background: #d6dbdf;
+  border-radius: 5px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+
+.gauge-bar-fill {
+  height: 100%;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Features & Insights */
+.features-col {
+  border-left: 1px solid #eee;
+  padding: 0 20px;
+}
+
+.feature-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.feature-card {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: #f8f9fa;
+  border: 1px solid #eee;
+  border-radius: 4px;
+}
+
+.insight-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 15px;
+}
+
+.insight-card {
+  padding: 10px;
+  background: #fff;
+  border-left: 4px solid;
+  font-size: 0.85rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.shap-col {
+  border-left: 1px solid #eee;
+  padding-left: 20px;
+}

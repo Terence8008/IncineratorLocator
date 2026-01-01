@@ -43,7 +43,7 @@ def clip_raster(input_tif, output_tif, boundary_gdf):
         with rasterio.open(output_tif, "w", **out_meta) as dest:
             dest.write(out_image)
 
-    print(f"✅ Clipped raster saved: {output_tif}")
+    print(f" Clipped raster saved: {output_tif}")
 
 # === Run the clipping ===
 pop_output = output_dir / "population_selangor.tif"

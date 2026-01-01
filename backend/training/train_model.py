@@ -7,7 +7,7 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
-    accuracy_score, classification_report, confusion_matrix, 
+    classification_report, confusion_matrix, 
     roc_curve, auc
 )
 
@@ -31,8 +31,7 @@ def train_model():
     X = df[feature_cols]
     y = df["suitable"]
 
-    # 3. Academic Rigor: Cross-Validation
-    # This proves the model's consistency across different data subsets
+    # 3. Cross-Validation
     rf_temp = RandomForestClassifier(n_estimators=100, random_state=42)
     cv_scores = cross_val_score(rf_temp, X, y, cv=5)
     print(f" 5-Fold Cross-Validation Mean Accuracy: {cv_scores.mean():.4f}")
@@ -45,13 +44,13 @@ def train_model():
     # 5. Final Model Training
     model = RandomForestClassifier(
         n_estimators=300, 
-        max_depth=15,       # Prevent overfitting
+        max_depth=15,      
         random_state=42,
-        n_jobs=-1           # Use all CPU cores
+        n_jobs=-1          
     )
     model.fit(X_train, y_train)
 
-    # 6. Evaluation & Visualizations (Crucial for Showcase)
+    # 6. Evaluation & Visualizations 
     y_pred = model.predict(X_test)
     y_prob = model.predict_proba(X_test)[:, 1]
 

@@ -2,9 +2,11 @@ import React, { useState } from "react";
 import { MapContainer, TileLayer, Marker, useMapEvents, ImageOverlay } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from 'leaflet';
+import "./App.css";
 import { SiteService } from "./services/api";
 import EvaluationDashboard from "./components/EvaluationDashboard"; 
 import ShapChart from "./components/ShapChart";
+import ScenarioSliders from "./components/ScenarioSliders";
 
 // --- Leaflet Icon Fix ---
 delete L.Icon.Default.prototype._getIconUrl;
@@ -16,14 +18,39 @@ L.Icon.Default.mergeOptions({
 
 const LAYER_BOUNDS = [[2.5929, 100.8087], [3.8654, 101.9704]];
 
+// --- Sub-Components moved inside or defined properly ---
+const LocationSelector = ({ onSelect }) => {
+  useMapEvents({
+    click(e) {
+      onSelect([e.latlng.lat, e.latlng.lng]);
+    },
+  });
+  return null;
+};
+
+const LayerControls = ({ active, onToggle }) => (
+  <div className="layer-controls">
+    <button className={`layer-btn ${active === 'population' ? 'active' : ''}`} onClick={() => onToggle(active === 'population' ? null : 'population')}>Population Heatmap</button>
+    <button className={`layer-btn ${active === 'landuse' ? 'active' : ''}`} onClick={() => onToggle(active === 'landuse' ? null : 'landuse')}>Land Use Map</button>
+  </div>
+);
+
 function App() {
-  const [activeView, setActiveView] = useState("map"); // "map" or "evaluation"
+  const [activeView, setActiveView] = useState("map");
   const [selectedPosition, setSelectedPosition] = useState(null);
-  const [data, setData] = useState({ prediction: null, features: null, insights: [], shap_explanation: null });
-  const [activeLayer, setActiveLayer] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
-
+  const [activeLayer, setActiveLayer] = useState(null);
+  const [weights, setWeights] = useState({ w_pop: 0.25, w_river: 0.25, w_road: 0.25, w_land: 0.25 });
+  const [data, setData] = useState({ prediction: null, policy_score: 0, features: null, insights: [], shap_explanation: null });
+  
+  const featureMeta = {
+    population: { label: "Population Density", unit: "people/km²" },
+    land_use: { label: "Land Use Category", unit: "Class ID" },
+    dist_river_m: { label: "Distance to River", unit: "meters" },
+    dist_road_m: { label: "Distance to Road", unit: "meters" }
+  };
+  
   const LANDUSE_COLORS = {
     1: "#a6d854", 2: "#8da0cb", 3: "#e78ac3", 4: "#ffd92f", 
     5: "#fc8d62", 6: "#66c2a5", 7: "#808080", 8: "#e41a1c", 9: "#7f0000",
@@ -36,28 +63,42 @@ function App() {
     {
       title: "Land Use Legend",
       rules: [
-        { label: "1-3: Agriculture/Rural", color: LANDUSE_COLORS[3] },
+        { label: "1: Non Paddy Agriculture", color: LANDUSE_COLORS[1] },
+        { label: "2-3: Agriculture/Rural", color: LANDUSE_COLORS[3] },
         { label: "4-5: Residential/Commercial", color: LANDUSE_COLORS[5] },
         { label: "6: Industrial", color: LANDUSE_COLORS[6] },
+        { label: "7: Road (No Color)" },
         { label: "8: Urban Built-up", color: LANDUSE_COLORS[8] },
         { label: "9: City Center (KL/Putrajaya)", color: LANDUSE_COLORS[9] },
       ],
     },
   ];
 
+  const getLevelColor = (l) => l === 'danger' ? '#dc3545' : l === 'warning' ? '#ffc107' : '#28a745';
+
   const handlePredict = async () => {
     if (!selectedPosition) return alert("Please select a location!");
     setLoading(true);
+
+    // Check your console to see if weights has values like {w_pop: 0.25, ...}
+    console.log("Weights in App.js state:", weights); 
+
     try {
-      const result = await SiteService.predict(selectedPosition[0], selectedPosition[1]);
+      const result = await SiteService.predict(
+        selectedPosition[0], 
+        selectedPosition[1], 
+        weights // Pass the object directly
+      );
+      
       setData({ 
         prediction: result.prediction, 
+        policy_score: result.policy_score, 
         features: result.features, 
         insights: result.insights || [],
-        shap_explanation: result.shap_explanation // New XAI Data
+        shap_explanation: result.shap_explanation 
       });
     } catch (err) {
-      alert("Failed to get prediction from server.");
+      console.error("Predict Error:", err);
     } finally {
       setLoading(false);
     }
@@ -66,24 +107,25 @@ function App() {
   return (
     <div style={{ width: "100vw", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: "sans-serif" }}>
       
-      {/* NAVIGATION BAR (To fill 20 mins) */}
-      <div style={navBarStyle}>
-        <div style={{ fontWeight: "bold", fontSize: "1.2em" }}>Selangor AI Site Analysis</div>
-        <div style={{ display: "flex", gap: "10px" }}>
-          <button style={activeView === "map" ? activeTabBtn : tabBtn} onClick={() => setActiveView("map")}>Map Explorer</button>
-          <button style={activeView === "evaluation" ? activeTabBtn : tabBtn} onClick={() => setActiveView("evaluation")}>Model Analytics</button>
+      {/* NAVIGATION BAR */}
+      <div className="nav-bar">
+        <div className="logo">Selangor AI Site Analysis</div>
+        <div className="nav-buttons">
+          <button className={`tab-btn ${activeView === "map" ? "active" : ""}`} onClick={() => setActiveView("map")}>Map Explorer</button>
+          <button className={`tab-btn ${activeView === "evaluation" ? "active" : ""}`} onClick={() => setActiveView("evaluation")}>Model Analytics</button>
         </div>
       </div>
 
       {activeView === "map" ? (
-        <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+        <div className="main-content">
           {/* 1. SIDEBAR: CRITERIA */}
           {showSidebar && (
-            <div style={sidebarStyle}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>
-                <h3 style={{ margin: 0 }}>Analysis Criteria</h3>
-                <button onClick={() => setShowSidebar(false)} style={closeBtn}>×</button>
+            <div className="sidebar">
+              <div className="sidebar-header">
+                <h3>Analysis Criteria</h3>
+                <button onClick={() => setShowSidebar(false)} className="close-btn">×</button>
               </div>
+              <ScenarioSliders weights={weights} setWeights={setWeights} />
               {thresholds.map((group, idx) => (
                 <div key={idx} style={{ marginBottom: "15px" }}>
                   <strong style={{ fontSize: "0.9em", color: "#444" }}>{group.title}</strong>
@@ -99,8 +141,8 @@ function App() {
           )}
 
           {/* Main Area */}
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", position: "relative" }}>
-            {!showSidebar && <button onClick={() => setShowSidebar(true)} style={openBtn}>☰ Criteria</button>}
+          <div className="map-wrapper">
+            {!showSidebar && <button onClick={() => setShowSidebar(true)} className="open-sidebar-btn">☰ Criteria</button>}
 
             {/* MAP SECTION */}
             <div style={{ flex: 1, position: "relative" }}>
@@ -114,40 +156,84 @@ function App() {
             </div>
 
             {/* RESULTS SECTION */}
-            <div style={resultsPanel}>
+            <div className="results-panel">
               <div style={{ textAlign: "center" }}>
-                <button onClick={handlePredict} disabled={loading} style={btnStyle}>{loading ? "Analyzing..." : "Analyze Site"}</button>
+                <button onClick={handlePredict} disabled={loading} className="analyze-btn">
+                  Analyzing Site
+                </button>
               </div>
               
               {data.prediction && (
-                <div style={{ marginTop: "15px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-                  <div>
-                    <h2 style={{ margin: "5px 0", color: data.prediction === "Suitable" ? "#28a745" : "#dc3545" }}>{data.prediction}</h2>
-                    
-                    <div style={featureSection}>
-                      <div style={featureGrid}>
-                        {Object.entries(data.features).map(([k, v]) => (
-                          <div key={k} style={featureItem}>
-                            <span style={featureLabel}>{k.replace(/_/g, ' ')}:</span>
-                            <span style={featureValue}>{typeof v === 'number' ? v.toFixed(2) : v}</span>
+                <div className="outcome-grid">
+                  
+                  {/* Column 1: AI & Policy Score */}
+                  <div className="assessment-col">
+                    <h3 style={{ fontSize: '1.3rem', marginBottom: '10px' }}>Site Suitability</h3>
+                    <div className="policy-gauge">
+                          <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '5px' }}>Policy Alignment</div>
+                          
+                          {/* Use logic to show 0 if data is missing */}
+                          <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#3498db' }}>
+                              {data.policy_score !== undefined ? Math.round(data.policy_score) : 0}%
                           </div>
-                        ))}
-                      </div>
-                    </div>
 
-                    <div style={insightGrid}>
-                      {data.insights.map((ins, i) => (
-                        <div key={i} style={{ ...insightCard, borderColor: getLevelColor(ins.level) }}>{ins.text}</div>
+                          <div className="gauge-bar-base">
+                              <div 
+                                  className="gauge-bar-fill" 
+                                  style={{ 
+                                      // Ensure width is at least 0%
+                                      width: `${data.policy_score || 0}%`, 
+                                      backgroundColor: data.policy_score > 50 ? "#3498db" : "#e74c3c" 
+                                  }} 
+                              />
+                          </div>
+                      </div>
+                    <h2 style={{ color: data.prediction === "Suitable" ? "#28a745" : "#dc3545", textAlign: 'center', marginTop: '20px' }}>
+                      Result: {data.prediction}
+                    </h2>
+                  </div>
+
+                  {/* Column 2: Site Features */}
+                  <div className="features-col">
+                    <h3 style={{ fontSize: '1.3rem', marginBottom: '15px' }}>Extracted Features</h3>
+                    <div className="feature-list">
+                      {data.features && Object.entries(data.features).map(([k, v]) => (
+                        <div key={k} className="feature-card">
+                          <span className="feature-label-text">
+                            {featureMeta[k]?.label || k.replace(/_/g, ' ')}
+                          </span>
+                          <strong className="feature-value-text">
+                            {typeof v === 'number' ? v.toFixed(1) : v} 
+                            <span className="feature-unit"> {featureMeta[k]?.unit || ''}</span>
+                          </strong>
+                        </div>
                       ))}
                     </div>
                   </div>
 
-                  {/* SHAP CHART SECTION (XAI) */}
-                  <div style={{ borderLeft: "1px solid #eee", paddingLeft: "20px" }}>
-                    <ShapChart shapValues={data.shap_explanation} />
+                  {/* Column 3: XAI (SHAP) & Insights */}
+                  <div className="shap-col">
+                    <div className="shap-section">
+                      <h3 style={{ fontSize: '1.3rem', marginBottom: '10px' }}>AI Decision Impact (SHAP)</h3>
+                      <ShapChart shapValues={data.shap_explanation} />
+                    </div>
+                  </div>
+                    
+                  <div className="shap-col">  
+                    <div className="insight-section">
+                      <h3 style={{ fontSize: '1.3rem', marginBottom: '10px' }}>Strategic Insights</h3>
+                      <div className="insight-list">
+                        {data.insights.map((ins, i) => (
+                          <div key={i} className="insight-card" style={{ borderLeftColor: getLevelColor(ins.level) }}>
+                            {ins.text}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
+
             </div>
           </div>
         </div>
@@ -158,31 +244,5 @@ function App() {
   );
 }
 
-// --- Styles & Helpers ---
-const navBarStyle = { background: "#1a2a3a", color: "white", padding: "10px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" };
-const tabBtn = { background: "none", border: "1px solid #555", color: "#ccc", padding: "6px 15px", borderRadius: "4px", cursor: "pointer" };
-const activeTabBtn = { background: "#3498db", border: "1px solid #3498db", color: "white", padding: "6px 15px", borderRadius: "4px", cursor: "pointer" };
-const sidebarStyle = { width: "260px", background: "#fff", borderRight: "1px solid #ddd", padding: "20px", zIndex: 1001, overflowY: "auto" };
-const resultsPanel = { padding: "15px", background: "#fff", borderTop: "2px solid #eee", overflowY: "auto", minHeight: "35%", maxHeight: "45%" };
-const btnStyle = { padding: "10px 30px", background: "#007bff", color: "#fff", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold" };
-const featureSection = { background: "#f8f9fa", padding: "10px", borderRadius: "8px", marginBottom: "10px" };
-const featureGrid = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" };
-const featureItem = { display: "flex", justifyContent: "space-between", padding: "4px 8px", background: "#fff", border: "1px solid #eee", borderRadius: "4px" };
-const featureLabel = { fontSize: "0.75em", color: "#777" };
-const featureValue = { fontSize: "0.85em", fontWeight: "bold" };
-const insightGrid = { display: "flex", flexWrap: "wrap", gap: "8px" };
-const insightCard = { padding: "10px", background: "#fff", borderLeft: "4px solid", fontSize: "0.8em", width: "100%", maxWidth: "400px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" };
-const LocationSelector = ({ onSelect }) => { useMapEvents({ click(e) { onSelect([e.latlng.lat, e.latlng.lng]); } }); return null; };
-const LayerControls = ({ active, onToggle }) => (
-  <div style={floatingPanel}>
-    <button style={active === 'population' ? activeBtn : {}} onClick={() => onToggle(active === 'population' ? null : 'population')}>Population Heatmap</button>
-    <button style={active === 'landuse' ? activeBtn : {}} onClick={() => onToggle(active === 'landuse' ? null : 'landuse')}>Land Use Map</button>
-  </div>
-);
-const floatingPanel = { position: "absolute", top: 10, right: 10, zIndex: 1000, background: "white", padding: 10, borderRadius: 8, display: "flex", flexDirection: "column", gap: 5, boxShadow: "0 2px 8px rgba(0,0,0,0.15)" };
-const activeBtn = { background: "#007bff", color: "#fff" };
-const openBtn = { position: "absolute", top: 10, left: 10, zIndex: 1000, background: "#fff", border: "1px solid #ccc", padding: "5px 10px", borderRadius: "4px", cursor: "pointer" };
-const closeBtn = { background: "none", border: "none", fontSize: "20px", cursor: "pointer" };
-const getLevelColor = (l) => l === 'danger' ? '#dc3545' : l === 'warning' ? '#ffc107' : '#28a745';
 
 export default App;

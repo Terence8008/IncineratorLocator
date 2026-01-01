@@ -1,67 +1,53 @@
-from fastapi import APIRouter
-import joblib
-import pandas as pd
-import numpy as np
-import shap
-import matplotlib # Not using matplotlib but fixing the issue of multi thread problem when request overlapped
-matplotlib.use('Agg')
-from pathlib import Path
-from utils.feature_extraction import extract_features_from_latlon
-from utils.analysis import get_site_insights
+# routes/prediction.py
+from fastapi import APIRouter, Query
+from services.prediction_service import PredictionService
+from services.scoring_service import ScoringService
+from services.explanation_service import ExplanationService
+from models.prediction_model import PredictionRequest, PredictionResponse, Insight
 
 router = APIRouter()
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-MODEL_PATH = BASE_DIR / "backend"/"models" / "incinerator_rf_model.pkl"
-TRAIN_DATA_PATH = BASE_DIR / "data" / "processed" / "selangor_training.csv"
 
-# Load Model and Initialize SHAP
-model = joblib.load(MODEL_PATH)
-# We use a small sample of training data as a background for the explainer
-background_data = pd.read_csv(TRAIN_DATA_PATH).drop(columns=['latitude', 'longitude', 'suitable']).sample(100)
-explainer = shap.TreeExplainer(model)
+# Initialize services (consider using dependency injection)
+prediction_service = PredictionService()
+scoring_service = ScoringService()
+explanation_service = ExplanationService()
 
 
-@router.get("/predict")
-def predict_site(latitude: float, longitude: float):
-    # 1. Extract raw features
-    features_dict = extract_features_from_latlon(latitude, longitude)
+@router.get("/predict", response_model=PredictionResponse)
+def predict_site(
+    latitude: float,
+    longitude: float,
+    w_pop: float = Query(0.25, ge=0, le=1, description="Weight for population factor"),
+    w_river: float = Query(0.25, ge=0, le=1, description="Weight for river proximity"),
+    w_road: float = Query(0.25, ge=0, le=1, description="Weight for road access"),
+    w_land: float = Query(0.25, ge=0, le=1, description="Weight for land use")
+):
+    """
+    Predict site suitability for incinerator placement.
     
-    # 2. Format for Model
-    input_data = np.array([[
-        features_dict["population"],
-        features_dict["land_use"],
-        features_dict["dist_river_m"],
-        features_dict["dist_road_m"]
-    ]])
+    Combines ML prediction, policy scoring, and explainability to assess
+    whether a location is suitable for industrial waste facility placement.
+    """
     
-    # 3. Get Prediction
-    prediction = int(model.predict(input_data)[0])
+    # Create request object
+    request = PredictionRequest(
+        latitude=latitude,
+        longitude=longitude,
+        weights={'pop': w_pop, 'river': w_river, 'road': w_road, 'land': w_land}
+    )
     
-    # 4. Calculate SHAP values (XAI)
-    # This explains why the model gave this specific prediction
-    shap_values = explainer.shap_values(input_data)
-
-    # Handle different SHAP return formats
-    if isinstance(shap_values, list):
-        # For older SHAP versions or certain classifiers, it returns a list [class0, class1]
-        # We want class 1 (Suitable)
-        impacts = shap_values[1][0] if len(shap_values) > 1 else shap_values[0][0]
-    else:
-        # For newer SHAP versions, it often returns a single array or Explanation object
-        # If the shape is (1, 4), it's already the impacts for the single prediction
-        if len(shap_values.shape) == 3: # (samples, features, classes)
-            impacts = shap_values[0, :, 1]
-        else:
-            impacts = shap_values[0]
-
-    return {
-        "prediction": "Suitable" if prediction == 1 else "Not Suitable",
-        "features": features_dict,
-        "shap_explanation": {
-            "population": float(impacts[0]),
-            "land_use": float(impacts[1]),
-            "dist_river_m": float(impacts[2]),
-            "dist_road_m": float(impacts[3])
-        },
-        "insights": get_site_insights(features_dict)
-    }
+    # Delegate to services
+    features = prediction_service.extract_features(request.latitude, request.longitude)
+    prediction = prediction_service.predict(features)
+    policy_score = scoring_service.calculate_score(features, request.weights)
+    explanation = explanation_service.explain(features)
+    insights = explanation_service.get_insights(features)
+    
+    
+    return PredictionResponse(
+        prediction=prediction,
+        policy_score=policy_score,
+        features=features,
+        shap_explanation=explanation,
+        insights=insights
+    )
