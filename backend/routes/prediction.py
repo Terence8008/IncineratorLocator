@@ -3,7 +3,7 @@ from fastapi import APIRouter, Query
 from services.prediction_service import PredictionService
 from services.scoring_service import ScoringService
 from services.explanation_service import ExplanationService
-from models.prediction_model import PredictionRequest, PredictionResponse, Insight
+from models.prediction_model import PredictionRequest, PredictionResponse
 
 router = APIRouter()
 

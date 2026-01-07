@@ -5,7 +5,7 @@ import random
 from pathlib import Path
 from shapely.geometry import Point
 from sklearn.preprocessing import MinMaxScaler
-from utils.feature_extraction import extract_features_from_latlon
+from services.feature_extraction_service import extract_features_from_latlon
 
 DATA_DIR = Path("data/processed")
 W_POP, W_RIVER, W_ROAD, W_LAND = 0.35, 0.30, 0.20, 0.15
