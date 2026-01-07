@@ -1,8 +1,6 @@
-# routes/layers.py
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from services.layer_service import LayerService
-from pathlib import Path
 
 router = APIRouter()
 

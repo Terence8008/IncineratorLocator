@@ -1,4 +1,3 @@
-# routes/prediction.py
 from fastapi import APIRouter, Query
 from services.prediction_service import PredictionService
 from services.scoring_service import ScoringService

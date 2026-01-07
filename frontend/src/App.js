@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { MapContainer, TileLayer, Marker, useMapEvents, ImageOverlay } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Polyline, useMapEvents, ImageOverlay } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from 'leaflet';
 import "./App.css";
@@ -7,6 +7,7 @@ import { SiteService } from "./services/api";
 import EvaluationDashboard from "./components/EvaluationDashboard"; 
 import ShapChart from "./components/ShapChart";
 import ScenarioSliders from "./components/ScenarioSliders";
+import RouteInfoPanel from "./components/RouteInfoPanel"
 
 // --- Leaflet Icon Fix ---
 delete L.Icon.Default.prototype._getIconUrl;
@@ -39,10 +40,12 @@ function App() {
   const [activeView, setActiveView] = useState("map");
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingRoute, setLoadingRoute] = useState(false); 
   const [showSidebar, setShowSidebar] = useState(true);
   const [activeLayer, setActiveLayer] = useState(null);
   const [weights, setWeights] = useState({ w_pop: 0.25, w_river: 0.25, w_road: 0.25, w_land: 0.25 });
   const [data, setData] = useState({ prediction: null, policy_score: 0, features: null, insights: [], shap_explanation: null });
+  const [routeData, setRouteData] = useState(null);
   
   const featureMeta = {
     population: { label: "Population Density", unit: "people/km²" },
@@ -79,15 +82,16 @@ function App() {
   const handlePredict = async () => {
     if (!selectedPosition) return alert("Please select a location!");
     setLoading(true);
+    setRouteData(null);
 
-    // Check your console to see if weights has values like {w_pop: 0.25, ...}
+    // Check console to see if weights has values like {w_pop: 0.25, ...}
     console.log("Weights in App.js state:", weights); 
 
     try {
       const result = await SiteService.predict(
         selectedPosition[0], 
         selectedPosition[1], 
-        weights // Pass the object directly
+        weights 
       );
       
       setData({ 
@@ -103,6 +107,31 @@ function App() {
       setLoading(false);
     }
   };
+
+  const handleCheckRoute = async () => {
+    if (!selectedPosition) {
+      alert("Please select a location first!");
+      return;
+    }
+
+    setLoadingRoute(true);
+
+    try {
+      const result = await SiteService.checkRoute(
+        selectedPosition[0],
+        selectedPosition[1]
+      );
+      
+      setRouteData(result);
+      console.log("Route optimized:", result);
+    } catch (err) {
+      console.error("Route optimization error:", err);
+      alert(`Failed to optimize route: ${err.message}`);
+    } finally {
+      setLoadingRoute(false);
+    }
+  };
+
 
   return (
     <div style={{ width: "100vw", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: "sans-serif" }}>
@@ -150,6 +179,33 @@ function App() {
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 {activeLayer && <ImageOverlay key={activeLayer} url={SiteService.getLayerUrl(activeLayer)} bounds={LAYER_BOUNDS} opacity={0.6} />}
                 {selectedPosition && <Marker position={selectedPosition} />}
+
+                {routeData && routeData.optimized_route && (
+                  <Polyline
+                    positions={routeData.optimized_route.path_coordinates.map(
+                      coord => [coord[1], coord[0]] // Convert [lon, lat] to [lat, lon]
+                    )}
+                    color="#ff6f00"
+                    weight={4}
+                    opacity={0.8}
+                  />
+                )}
+
+
+                {routeData && routeData.nearest_landfill && (
+                  <Marker 
+                    position={[
+                      routeData.nearest_landfill.coordinates[1],
+                      routeData.nearest_landfill.coordinates[0]
+                    ]}
+                    icon={new L.Icon({
+                      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
+                      iconSize: [25, 41],
+                      iconAnchor: [12, 41],
+                    })}
+                  />
+                )}
+
                 <LocationSelector onSelect={setSelectedPosition} />
               </MapContainer>
               <LayerControls active={activeLayer} onToggle={setActiveLayer} />
@@ -161,7 +217,30 @@ function App() {
                 <button onClick={handlePredict} disabled={loading} className="analyze-btn">
                   Analyzing Site
                 </button>
+
+                {data.prediction === "Suitable" && (
+                  <button 
+                    onClick={handleCheckRoute} 
+                    disabled={loadingRoute}
+                    className="route-btn"
+                    style={{ 
+                      marginLeft: '10px',
+                      backgroundColor: '#2e7d32',
+                      color: 'white',
+                      padding: '12px 24px',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: loadingRoute ? 'not-allowed' : 'pointer',
+                      fontSize: '16px',
+                      fontWeight: 'bold',
+                      opacity: loadingRoute ? 0.6 : 1
+                    }}
+                  >
+                    {loadingRoute ? "🔄 Optimizing..." : "2️⃣ Check Route to Landfill"}
+                  </button>
+                )}
               </div>
+
               
               {data.prediction && (
                 <div className="outcome-grid">
@@ -231,6 +310,13 @@ function App() {
                       </div>
                     </div>
                   </div>
+
+                  {routeData && (
+                    <div className="route-col" style={{ gridColumn: '1 / -1' }}>
+                      <RouteInfoPanel routeData={routeData} />
+                    </div>
+                  )}
+
                 </div>
               )}
 

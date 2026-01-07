@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from routes.prediction import router as prediction_router
 from routes.layers import router as layer_router
-#from routes.health import router as health_router
+from routes.landfill_route import router as route_router
 
 app = FastAPI(title="Incinerator Site Selection API")
 
@@ -16,6 +16,7 @@ app.mount("/static", StaticFiles(directory=DATA_PATH), name="static")
 # Register API routes
 app.include_router(prediction_router, prefix="/api")
 app.include_router(layer_router, prefix="/api")
+app.include_router(route_router, prefix="/api")
 
 # Allow CORS
 origins = [

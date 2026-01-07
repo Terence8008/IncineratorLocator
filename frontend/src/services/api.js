@@ -28,6 +28,25 @@ export const SiteService = {
     }
   },
 
+  /**
+   * Check optimized route from incinerator to nearest landfill
+   * @param {number} latitude 
+   * @param {number} longitude 
+   * @returns {Promise<Object>} Route optimization result
+   */
+  async checkRoute(latitude, longitude) {
+    const response = await fetch(
+      `http://localhost:8000/api/check-route-to-landfill?latitude=${latitude}&longitude=${longitude}`
+    );
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to optimize route');
+    }
+    
+    return await response.json();
+  },
+
   // Get the URL for the heatmap layers
   getLayerUrl: (layerName) => {
     return `${API_BASE_URL}/layers/${layerName}`;
